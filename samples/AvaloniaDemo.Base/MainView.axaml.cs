@@ -1,8 +1,10 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.PanAndZoom;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 namespace AvaloniaDemo;
@@ -26,8 +28,25 @@ public partial class MainView : UserControl
             ZoomBorder2.KeyDown += ZoomBorder_KeyDown;
             ZoomBorder2.ZoomChanged += ZoomBorder_ZoomChanged;
         }
+        ShowR1.Click += ShowR1_Click;
+        ShowT1.Click += ShowT1_Click;
+        ShowT2.Click += ShowT2_Click;
 
         DataContext = ZoomBorder1;
+    }
+
+    private void ShowT1_Click(object sender, RoutedEventArgs e)
+    {
+        T1.BringIntoView();
+    }
+    private void ShowT2_Click(object sender, RoutedEventArgs e)
+    {
+        T2.BringIntoView();
+    }
+
+    private void ShowR1_Click(object sender, RoutedEventArgs e)
+    {
+        R1.BringIntoView();
     }
 
     private void ZoomBorder_KeyDown(object? sender, KeyEventArgs e)

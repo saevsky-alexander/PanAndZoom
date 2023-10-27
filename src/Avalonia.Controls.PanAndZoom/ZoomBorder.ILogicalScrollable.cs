@@ -1,6 +1,7 @@
 ﻿using System;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.LogicalTree;
 using static System.Math;
 
 namespace Avalonia.Controls.PanAndZoom;
@@ -163,7 +164,84 @@ public partial class ZoomBorder : ILogicalScrollable
 
     bool ILogicalScrollable.BringIntoView(Control target, Rect targetRect)
     {
-        return false;
+        // Get offset in original coord (X, Y)
+        // Get offset in scaled coord (zX, zY)
+        // Get rect in Zcoord = (zX, zY, targetRect.X*scale1, targetRect.Y*scale1);
+        // If Zcoord in VP return
+        // If  Zcoord.Width <= VP.Widch
+        //   & Zcoord.Heigth <= VP.Height
+        // Calc the invisible x-proj = Zcoord.X-Segment \ VP.X-Segment
+        //                    y-proj = Zcoord.Y-Segment \ VP.Y-Segment
+        // {
+        //   If y-proj is above VP
+        //    shift.Y = - |y-proj|
+        // else shift.Y = |y-proj|
+        // If x-proj is left to VP
+        //    shift.X = - |x-proj|
+        // else shift.X = |x-proj|
+        // }
+        // Else scale = Min(VP.Widch / Zcoord.Width, VP.Heigth / Zcoord.Heigth)
+        // {
+        //    ZcoordD = (zX * scale, zY*scale,  targetRect.X*scale1*scale, targetRect.Y*scale1*scale)
+        //    VPD = (vX*scale, vY*scale, vWidth, vHeight)
+        //    calc shift.X = vX(scale - 1)+scaleD
+        // }
+        // ********************************
+        // *                              *
+        // *               V+             *
+        // *               ---------------+-----
+        // ****************|*******Z+******    |
+        //                 ---------------------
+        // 
+        if (_element == null)
+        {
+            return false;
+        }
+        if (_viewport.Width < 40 || _viewport.Height < 40)
+            return false;
+        /* var offsetX = target.IsSet(Canvas.LeftProperty)?
+              Canvas.GetLeft(target) : 0.0;
+        var offsetY = target.IsSet(Canvas.TopProperty)?
+              Canvas.GetTop(target) : 0.0;
+        var mx = MatrixHelper.Translate(offsetX, offsetY);*/
+        var mx = target.TransformToVisual(this);
+        if (!mx.HasValue)
+            return false;
+        var zCoord = targetRect.TransformToAABB(mx.Value).Inflate(10);
+        /* var zCoord = new Rect(
+              MatrixHelper.TransformPoint(_matrix, targetX.TopLeft),
+              new Size(targetX.Width*_zoomX, targetX.Height*_zoomY)); */
+        var VP = new Rect(new Point(), _viewport);
+        if (VP.Contains(zCoord))
+            return true;
+        if (zCoord.Width <= _viewport.Width && zCoord.Height <= _viewport.Height)
+        {
+            // No zoom-out is required
+            var shift = GetShift(zCoord, VP);
+            _matrix = MatrixHelper.ScaleAndTranslate(_zoomX, _zoomY, OffsetX - shift.X, OffsetY - shift.Y);
+        }
+        else 
+        {
+            double scale = Min(VP.Width / zCoord.Width, VP.Height / zCoord.Height);
+            Matrix matrixD = new Matrix(_zoomX*scale, 0, 0, _zoomY*scale, _matrix.M31, _matrix.M32);
+            Rect zCoordD = new Rect(zCoord.X*scale, zCoord.Y*scale, zCoord.Width*scale, zCoord.Height*scale);
+            var shift = GetShift(zCoordD, VP);
+            _matrix =  MatrixHelper.ScaleAndTranslate(_zoomX*scale, _zoomY*scale, OffsetX + shift.X, OffsetY + shift.Y);
+        }
+        Invalidate(false);
+        return true;
+    }
+    public static Vector GetShift(Rect zCoord, Rect VP)
+    {
+        var xProj = zCoord.XProj().SubTract(VP.XProj());
+        var yProj = zCoord.YProj().SubTract(VP.YProj());
+        var shiftX = !xProj.HasValue? 0
+          :  xProj.Value.From < VP.X? xProj.Value.From - VP.X
+          :  xProj.Value.To - VP.BottomRight.X;
+        var shiftY = !yProj.HasValue? 0
+          : yProj.Value.From < VP.Y? yProj.Value.From - VP.Y
+          : yProj.Value.To - VP.BottomRight.Y;
+        return new Vector (shiftX, shiftY);
     }
 
     Control? ILogicalScrollable.GetControlInDirection(NavigationDirection direction, Control? from)
